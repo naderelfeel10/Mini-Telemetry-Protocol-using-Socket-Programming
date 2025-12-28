@@ -1,8 +1,5 @@
 # Reliable UDP Telemetry Protocol
 
-
-Demo Video : https://drive.google.com/file/d/1ZUweajaN7BUTfhIaKxr9_4C7dud1GyOc/view?usp=drive_link
-
 ## Overview
 
 This project implements a **lightweight, reliable telemetry protocol over UDP**, designed for IoT and embedded systems operating under unreliable network conditions (loss, delay, duplication).
