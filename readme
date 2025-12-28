@@ -1,0 +1,209 @@
+# Reliable UDP Telemetry Protocol
+
+
+Demo Video : https://drive.google.com/file/d/1ZUweajaN7BUTfhIaKxr9_4C7dud1GyOc/view?usp=drive_link
+
+## Overview
+
+This project implements a **lightweight, reliable telemetry protocol over UDP**, designed for IoT and embedded systems operating under unreliable network conditions (loss, delay, duplication).
+
+Instead of relying on TCP or heavyweight protocols (e.g., MQTT-SN), reliability is implemented at the **application layer**, allowing full control over performance, overhead, and behavior.
+
+---
+
+## Key Features
+
+* Custom UDP packet format with compact binary header
+* Application-layer reliability (ACK + retransmission)
+* Sequence number–based loss, gap, and duplication detection
+* Batch transmission for efficiency
+* Heartbeat mechanism for liveness detection
+* Packet reordering buffer with time window
+* Network impairment testing using Linux `netem`
+* CSV-based logging and metrics collection
+* Wireshark validation via PCAP capture
+
+---
+
+## Architecture
+
+The system consists of two main components:
+
+* **Client (Device Emulator)**
+
+  * Sends INIT, DATA, HEARTBEAT, and END messages
+  * Implements retransmission for unacknowledged packets
+
+* **Server (Collector)**
+
+  * Receives and parses packets
+  * Detects duplicates, gaps, and reordering
+  * Sends ACKs
+  * Logs telemetry data and performance metrics
+
+Communication is **direct UDP** with no broker or middleware.
+
+---
+
+## Packet Format
+
+### Header (11 bytes)
+
+| Field       | Size | Description                                    |
+| ----------- | ---- | ---------------------------------------------- |
+| msg_type    | 1 B  | Message type (INIT, DATA, HEARTBEAT, ACK, END) |
+| device_id   | 2 B  | Unique device identifier                       |
+| seq         | 2 B  | Sequence number                                |
+| timestamp   | 4 B  | UNIX timestamp                                 |
+| batch_count | 1 B  | Number of readings                             |
+| padding     | 2 B  | Alignment                                      |
+
+### Payload (per reading)
+
+| Field       | Size |
+| ----------- | ---- |
+| temperature | 4 B  |
+| humidity    | 4 B  |
+| timestamp   | 4 B  |
+
+---
+
+## Message Types
+
+| Type      | Value | Purpose             |
+| --------- | ----- | ------------------- |
+| INIT      | 0     | Device registration |
+| DATA      | 1     | Telemetry batch     |
+| HEARTBEAT | 2     | Liveness check      |
+| ACK       | 3     | Acknowledgment      |
+| END       | 4     | End of test         |
+
+---
+
+## Reliability Mechanism
+
+* Each DATA packet carries a **sequence number**
+* Server tracks last received sequence per device
+* Duplicate packets are detected and ignored
+* Missing sequences trigger **gap detection**
+* Client retransmits packets if ACK not received within timeout
+
+This achieves reliability without TCP overhead.
+
+---
+
+## Reordering Handling
+
+Packets may arrive out of order under network impairments.
+
+The server:
+
+* Buffers packets per device
+* Uses a **reordering window (250 ms)**
+* Flushes packets sorted by payload timestamp
+
+---
+
+## Heartbeat Monitoring
+
+* Client sends HEARTBEAT messages periodically
+* Server tracks last heartbeat per device
+* Warns if a device becomes inactive
+
+---
+
+## Metrics Collected
+
+Metrics are written to `metrics_summary.csv`:
+
+* Bytes per report
+* Total packets received
+* Duplicate rate
+* Sequence gap count
+* CPU processing time per report (ms)
+
+Raw telemetry data is stored in `telemetry_log.csv`.
+
+---
+
+## Network Impairment Testing
+
+Linux `netem` is used to emulate real network conditions:
+
+* Packet loss
+* Delay
+* Normal (baseline)
+
+Example:
+
+```bash
+./test_netem.sh loss
+./test_netem.sh delay
+./test_netem.sh clean
+```
+
+---
+
+## Wireshark Validation
+
+Traffic can be captured using:
+
+```bash
+sudo tcpdump -i lo udp port 5053 -w telemetry_test.pcap
+```
+
+The `.pcap` file can be inspected in Wireshark to verify:
+
+* UDP packets
+* Custom header fields
+* Sequence numbers
+* Retransmissions
+
+---
+
+## How to Run
+
+### Start Server
+
+```bash
+python3 server.py
+```
+
+### Run Client
+
+```bash
+python3 client.py --batch=2 --device_id=101
+```
+
+### Automated Testing
+
+```bash
+python3 test.py --cmd=loss
+```
+
+---
+
+## Motivation & Comparison
+
+| Protocol          | Pros                          | Cons                             |
+| ----------------- | ----------------------------- | -------------------------------- |
+| UDP               | Fast, low overhead            | No reliability                   |
+| TCP               | Reliable                      | High latency, congestion control |
+| MQTT-SN           | Standardized                  | Broker-based, overhead           |
+| **This Protocol** | Lightweight, reliable, direct | Application-specific             |
+
+---
+
+## Use Cases
+
+* IoT telemetry
+* Embedded systems
+* Sensor networks
+* Real-time monitoring
+* Network protocol experimentation
+
+---
+
+## Conclusion
+
+This project demonstrates that **reliable telemetry can be achieved over UDP** using a carefully designed application-layer protocol, offering better control, lower overhead, and suitability for constrained environments.
